@@ -1,0 +1,159 @@
+SELECT *
+FROM Nashville_dt
+
+SELECT SaleDate
+FROM Nashville_dt
+
+-- convert from DD/MM/YYYY (from Excel Query Wizard) TO SQLITE recognisable format YYYY-MM-DD
+SELECT 
+ SUBSTR(SaleDate, 7, 4) || '-' ||
+ SUBSTR(SaleDate, 4, 2) || '-' ||
+ SUBSTR(SaleDate, 1, 2) AS Sale_Date
+ FROM Nashville_dt
+ 
+--store the new format of Saledate and update table
+UPDATE Nashville_dt
+SET SaleDate = 
+ SUBSTR(SaleDate, 7, 4) || '-' ||
+ SUBSTR(SaleDate, 4, 2) || '-' ||
+ SUBSTR(SaleDate, 1, 2)
+
+--looking at PropertyAddress
+SELECT PropertyAddress
+FROM Nashville_dt
+
+SELECT *
+FROM Nashville_dt
+WHERE PropertyAddress = NULL
+
+--SQLite not showing NULL where string is empty text
+SELECT COUNT(*) AS empty_string_count
+FROM Nashville_dt
+WHERE PropertyAddress = '';
+
+--change all empty fields to NULL
+UPDATE Nashville_dt
+SET PropertyAddress = NULL
+WHERE PropertyAddress = '';
+--errored in SQLite
+SELECT *
+FROM Nashville_dt
+WHERE PropertyAddress = NULL
+--errored in SQLite
+-- using the correct SQLite Syntax IS NULL
+SELECT *
+FROM Nashville_dt
+WHERE PropertyAddress IS NULL
+
+-- Issue: there are NULL addresses. These have the same ParcelID, but different UniqueID. 
+--Solution: we want to populate the NULLs with the address from the UniqueID where ParcelID match (join table to itself)
+-- UniqueID != UniqueID  means they must be on different rows.
+SELECT a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress
+FROM Nashville_dt a
+JOIN Nashville_dt b
+ON a.ParcelID = b.ParcelID
+AND CAST(a.UniqueID AS INTEGER) != CAST(b.UniqueID AS INTEGER)
+--above didnot work (CAST) 
+-- you need to go to data structure and define the column UniqueID as INTEGER and Primary Key manually and execute in Studio.
+SELECT a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress
+FROM Nashville_dt a
+JOIN Nashville_dt b
+ON a.ParcelID = b.ParcelID
+AND a.UniqueID != b.UniqueID
+--above didnot work
+PRAGMA table_info(Nashville_dt);
+--used auto-generated (SQLIte) rowids and it worked! Also write IS NULL in SQLite
+SELECT a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress
+FROM Nashville_dt a
+JOIN Nashville_dt b
+ON a.ParcelID = b.ParcelID
+AND a.UniqueID != b.UniqueID
+WHERE a.PropertyAddress IS NULL
+-- where a.PropertyAddress is null; we are going to populate it with b.PropertyAddress
+
+--COALESCE in SQLite (instead of ISNULL()
+-- update the table. 
+-- SQLite does not support the UPDATE ... FROM syntax that is available in some other SQL databases like PostgreSQL or SQL Server.
+--SQLite doesn't allow UPDATE ... FROM, you need to use a UPDATE statement with a correlated subquery or JOIN inside a SET clause.
+UPDATE Nashville_dt
+SET PropertyAddress = (
+ SELECT COALESCE(b.PropertyAddress, Nashville_dt.PropertyAddress)
+FROM Nashville_dt b
+WHERE b.ParcelID = Nashville_dt.ParcelID
+AND b.UniqueID != Nashville_dt.UniqueID
+LIMIT 1
+)
+WHERE PropertyAddress IS NULL;
+
+-- looking at PropertyAddress. 
+SELECT PropertyAddress
+FROM Nashville_dt
+--SUBSTR(string, startpoint, size) --> string
+--INSTR(string, de-limiter-point) --> number
+--Split column PropertyAddress - creating new Address1 and Address2
+SELECT PropertyAddress,
+ SUBSTR(PropertyAddress, 1, INSTR(PropertyAddress, ',')-1) AS Address1,
+ SUBSTR(PropertyAddress, INSTR(PropertyAddress, ',')+1) AS Address2
+ FROM Nashville_dt
+
+--added new columns - do one-by-one by commenting out
+ALTER TABLE Nashville_dt
+ADD COLUMN Address1 TEXT
+ADD COLUMN Address2 TEXT
+
+--update the table - do one-by-one by commenting out
+UPDATE Nashville_dt
+SET Address1 = SUBSTR(PropertyAddress, 1, INSTR(PropertyAddress, ',')-1) 
+SET Address2 = SUBSTR(PropertyAddress, INSTR(PropertyAddress, ',')+1)
+
+--look at owner address
+SELECT OwnerAddress
+FROM Nashville_dt
+
+SELECT 
+    SUBSTR(OwnerAddress, 1, INSTR(OwnerAddress, ',') - 1) AS StreetAddress,
+    SUBSTR(OwnerAddress, INSTR(OwnerAddress, ',') + 2, 
+           INSTR(SUBSTR(OwnerAddress, INSTR(OwnerAddress, ',') + 1), ',') - 1) AS City,
+    SUBSTR(OwnerAddress, INSTR(OwnerAddress, ',') + INSTR(SUBSTR(OwnerAddress, INSTR(OwnerAddress, ',') + 1), ',') + 2) AS State
+FROM Nashville_dt;
+
+SELECT DISTINCT(SoldASVacant), COUNT(SoldAsVacant)
+FROM Nashville_dt
+GROUP BY(SoldAsVacant)
+ORDER BY 2
+
+SELECT SoldAsVacant,
+CASE WHEN SoldAsVacant = 'Y' THEN 'Yes'
+  WHEN SoldAsVacant = 'N' THEN 'No'
+  ELSE SoldAsVacant
+  END AS SoldStatus
+FROM Nashville_dt 
+
+--update the table
+UPDATE Nashville_dt
+SET SoldAsVacant = CASE 
+                       WHEN SoldAsVacant = 'Y' THEN 'Yes'
+                       WHEN SoldAsVacant = 'N' THEN 'No'
+                       ELSE SoldAsVacant
+                   END;
+
+
+-- delete unused columns (donot work in SQLite)
+SELECT *
+FROM Nashville_dt
+ALTER TABLE Nashville_dt
+DROP COLUMN TaxDistrict
+
+
+
+
+
+
+
+
+
+
+
+
+
+
